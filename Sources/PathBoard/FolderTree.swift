@@ -132,7 +132,7 @@ struct FolderTree: NSViewRepresentable {
             let writer = NSPasteboardItem(); writer.setData(data, forType: dragType); return writer
         }
         func outlineView(_ outlineView: NSOutlineView, validateDrop info: NSDraggingInfo, proposedItem item: Any?, proposedChildIndex index: Int) -> NSDragOperation {
-            guard info.draggingSource is NSOutlineView, let data = info.draggingPasteboard.data(forType: dragType), let payload = try? JSONDecoder().decode(DragPayload.self, from: data), payload.panelID != owner.panel.id else { return [] }
+            guard info.draggingSource != nil, let data = info.draggingPasteboard.data(forType: dragType), let payload = try? JSONDecoder().decode(DragPayload.self, from: data), payload.panelID != owner.panel.id else { return [] }
             if let node = item as? TreeNode {
                 guard node.browsable else { return [] }; outlineView.setDropItem(node, dropChildIndex: NSOutlineViewDropOnItemIndex)
             } else { outlineView.setDropItem(nil, dropChildIndex: NSOutlineViewDropOnItemIndex) }
