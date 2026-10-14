@@ -24,7 +24,7 @@
 | ツリー展開・選択・現在位置 | 合格 | ネイティブUIで確認。ドラッグの端から端までの手動検証は未完了 |
 | PKG作成・内容検査 | 合格 | arm64、Bundle ID、最低OS、MIT、アドホック署名、インストーラースクリプトなし |
 | PKGのDeveloper ID署名 | なしを確認 | アプリのアドホック署名と区別 |
-| GitHub Actions | 合格 | Run 38521128834でテスト・PKG作成・Artifacts保存まで成功 |
+| GitHub Actions | 合格 | Run 38524811658でテスト・PKG作成・Artifacts保存まで成功 |
 
 実クラウド基本テストは同じサービス内も含む4×4の全16方向で、空フォルダ・隠しファイル・Markdownを含む小さなフォルダを移動し、逆操作で取り戻した。テスト領域は専用のUUID付き領域だけを使用し、終了後に片付けた。各サービスの別アカウント・共有ドライブは未検証。
 
@@ -86,8 +86,8 @@ python3 scripts/check-release-gate.py --fingerprint
 ## GitHubの実行結果
 
 - Public公開先：[MZ-Gen-Labs/PathBoard](https://github.com/MZ-Gen-Labs/PathBoard)
-- ビルド対象コミット：`eaa3aec2289e1960c56538d3984f840e51573058`
-- [自動ビルド38521128834](https://github.com/MZ-Gen-Labs/PathBoard/actions/runs/38521128834)：成功。テスト、PKG生成、Artifacts保存まで確認。
+- ビルド対象コミット：`83112e8934e7581548e739c03e34a5cbaf5acd31`
+- [自動ビルド38524811658](https://github.com/MZ-Gen-Labs/PathBoard/actions/runs/38524811658)：成功。テスト、PKG生成、Artifacts保存まで確認。
 - 自動生成したPKGを取得し、内容検査とSHA-256照合を再実施して合格。
 - 正式Releaseの受け入れゲートは未完了のまま。タグは公開していない。
 - 画面からのドラッグ・確認メニュー・転送結果までを通す試験は未完了。AppKitのドラッグ元は特定のビュー型に限定せず、アプリ内の専用データ型と登録パネルで検証する。診断コードは公開ソースへ残していない。
