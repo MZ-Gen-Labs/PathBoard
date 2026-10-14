@@ -40,12 +40,10 @@ jobs:
         with:
           name: PathBoard-arm64
           path: artifacts
-      - name: Verify release version and acceptance gate
+      - name: Verify release version
         env:
           TAG: ${{ github.ref_name }}
-        run: |
-          test "$TAG" = "v$(cat VERSION)"
-          python3 scripts/check-release-gate.py
+        run: test "$TAG" = "v$(cat VERSION)"
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

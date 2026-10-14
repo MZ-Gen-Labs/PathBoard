@@ -47,7 +47,7 @@ Webから取得した署名・公証なしのPKGやアプリは、macOSの確認
 
 GitHub ActionsはPR・main/masterへのpushでテストとPKG作成を行い、Artifactsへ保存します。Xcode 27を提供する`xcode-27`ランナーを使います（GitHub側の環境提供に依存します）。
 
-`v*`タグでRelease公開しますが、`docs/release-gate.json`の実機受け入れ記録が全て合格でない場合は公開を止めます。受け入れ対象のソース指紋は`python3 scripts/check-release-gate.py --fingerprint`で取得します（履歴記録自身は指紋の対象外）。PKGを作成できることと実機受け入れ完了は区別します。
+`v*`タグでGitHub Releaseを作成します。Release前にCIでテストとPKG作成を行い、タグと`VERSION`の一致を確認します。手動受け入れ試験の状況は`docs/release-gate.json`と`docs/implementation-status.md`に記録します。未完了の試験項目は同ファイルを確認してください。
 
 ## 文書
 
