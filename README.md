@@ -1,2 +1,57 @@
-# PathBoard
-A native macOS file organizer with four folder trees, verified transfers, recoverable history, and unsigned PKG builds.
+# PathBoard（パスボード）
+
+Macの保存先を2×2のツリーで並べ、パネル間でファイルを整理するネイティブアプリです。
+
+**開発版です。少量の取得済みデータで、ローカル・iCloud・Google Drive・OneDriveの16方向の移動と取り戻しを検証しました。オンライン専用・通信切断などの受け入れ試験と、別MacでのPKG試験は未完了です。重要なデータでの移動は、受け入れ完了まで避けてください。**
+
+## 対応環境
+
+Apple Silicon、macOS 27.0以降。開発時の検証環境はmacOS 27.0.1 / Xcode 27.0。Intelと過去のOSは対象外です。
+
+## 使い方
+
+1. 「フォルダを選択」で保存先やObsidian Vaultを最大4個登録します。
+2. フォルダを展開し、別のパネルのフォルダ行または背景へドラッグします。
+3. ドロップ後にコピー／移動を選びます。同名なら別名保存／スキップ／キャンセルを選びます。
+4. 保存先と配置はワークスペースとして保存できます。展開状態・現在位置・スクロールも保持します。
+5. 「履歴」から結果を確認し、未変更の項目を取り戻せます。
+
+移動はコピーとSHA-256・属性の検証後、元データをゴミ箱へ保全します。ゴミ箱が使えない保存先では元を残し、要確認で止まります。完全削除へ切り替えません。ゴミ箱の容量消費やクラウド側の削除扱いは各プロバイダーに依存します。
+
+移動の取り戻しは未変更の転送先から元へ逆転送します。コピーの取り消しは未変更のコピーをゴミ箱へ移します。改名・編集・削除、保存先利用不可の場合は自動復元しません。バックアップの代わりではありません。
+
+## クラウドと対象外
+
+iCloud・Google Drive・OneDriveや、Mac上でフォルダとして提供されるその他のドライブを共通のファイル操作で扱います。サービスへの直接ログインは行いません。Mac上の処理完了はクラウドのアップロード完了を意味しません。
+
+未ダウンロード項目はプロバイダーから読み取れるまで待ちます。処理中でもキャンセル要求を出せますが、OSが行っているコピーや取得が戻るまでは処理停止が遅れることがあります。
+
+初期版は通常ファイル・通常フォルダが対象です。シンボリックリンク、ハードリンク、パッケージ、特殊ファイルを含む項目は停止します。上書き・フォルダ統合・同一パネル内・Finder間のドラッグ転送、Obsidianリンク修正は行いません。
+
+## ビルド・PKG
+
+```sh
+swift test --disable-sandbox
+bash scripts/build-pkg.sh
+open dist/PathBoard.app
+```
+
+出力は`dist/PathBoard-<version>-arm64.pkg`とSHA-256です。PKGは`/Applications/PathBoard.app`を配置します。Developer ID署名・公証はありません。アプリは証明書不要のアドホック署名を使います。
+
+Webから取得した署名・公証なしのPKGやアプリは、macOSの確認・許可操作が必要になる場合があります。[Appleの説明](https://support.apple.com/102445)を参照してください。対象OSの別Macで検証済みの手順は、受け入れ完了後に記載します。インストーラーがセキュリティ設定を変更することはありません。
+
+更新は新しいPKGをインストールします。設定・履歴は`~/Library/Application Support/PathBoard/`にあり、更新で消しません。削除はアプリをゴミ箱へ移します。設定・履歴を削除する場合はこのフォルダを別途削除してください。登録した保存先は削除しません。
+
+## 自動ビルドとリリース
+
+GitHub ActionsはPR・main/masterへのpushでテストとPKG作成を行い、Artifactsへ保存します。Xcode 27を提供する`xcode-27`ランナーを使います（GitHub側の環境提供に依存します）。
+
+`v*`タグでRelease公開しますが、`docs/release-gate.json`の実機受け入れ記録が全て合格でない場合は公開を止めます。受け入れ対象のソース指紋は`python3 scripts/check-release-gate.py --fingerprint`で取得します（履歴記録自身は指紋の対象外）。PKGを作成できることと実機受け入れ完了は区別します。
+
+## 文書
+
+- [仕様書](docs/PathBoard-spec.md)
+- [テスト仕様書](docs/PathBoard-test-spec.md)
+- [実装・検証状況](docs/implementation-status.md)
+
+MIT License / Copyright (c) 2026 MZ-Gen-Labs

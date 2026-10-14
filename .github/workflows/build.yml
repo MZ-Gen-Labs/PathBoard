@@ -1,0 +1,53 @@
+name: Build and package
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          test "$(xcrun --sdk macosx --show-sdk-version | cut -d. -f1)" -ge 27
+      - name: Test
+        run: swift test --disable-sandbox
+      - name: Build unsigned PKG
+        run: bash scripts/build-pkg.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PathBoard-arm64
+          path: |
+            dist/*.pkg
+            dist/*.sha256
+          if-no-files-found: error
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: PathBoard-arm64
+          path: artifacts
+      - name: Verify release version and acceptance gate
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          test "$TAG" = "v$(cat VERSION)"
+          python3 scripts/check-release-gate.py
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" artifacts/*.pkg artifacts/*.sha256 --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
