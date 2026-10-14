@@ -64,6 +64,7 @@ struct FolderTree: NSViewRepresentable {
                 while !FileSafety.exists(current), current.path != rootURL.path { current.deleteLastPathComponent() }
                 currentURL = current
             }
+            if selectedURL == nil { selectedURL = currentURL }
             nodes.removeAll(); root = value.panel.root.map { TreeNode(url: $0) }; refreshing = true
             outline.reloadData(); if let root { load(root) } else { refreshing = false }
         }
