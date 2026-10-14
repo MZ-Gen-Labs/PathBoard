@@ -10,7 +10,7 @@ import PathBoardCore
             ContentView().environmentObject(store).frame(minWidth: 900, minHeight: 600)
                 .onAppear { delegate.store = store; NSApp.setActivationPolicy(.regular); NSApp.activate(ignoringOtherApps: true) }
         }.defaultSize(width: 1200, height: 800)
-        .commands { CommandGroup(replacing: .newItem) { Button("ワークスペースを保存…") { store.saveWorkspaceAs() }.keyboardShortcut("s"); Button("設定の復旧・初期化…") { store.resetDamagedSettings() } }; CommandGroup(after: .toolbar) { Button("再読み込み") { store.refreshID = UUID() }.keyboardShortcut("r"); Button("処理履歴") { store.historyVisible = true }.keyboardShortcut("h", modifiers: [.command, .shift]) } }
+        .commands { CommandGroup(replacing: .newItem) { Button("新規ワークスペース…") { store.createWorkspace() }.keyboardShortcut("n"); Button("現在の配置を複製して保存…") { store.saveWorkspaceAs() }.keyboardShortcut("s"); Button("設定の復旧・初期化…") { store.resetDamagedSettings() } }; CommandGroup(after: .toolbar) { Button("再読み込み") { store.refreshID = UUID() }.keyboardShortcut("r"); Button("処理履歴") { store.historyVisible = true }.keyboardShortcut("h", modifiers: [.command, .shift]) } }
     }
 }
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -36,7 +36,8 @@ struct ContentView: View {
                 Picker("ワークスペース", selection: Binding(get: { store.workspace.id }, set: { store.selectWorkspace($0) })) {
                     ForEach(store.preferences.workspaces) { Text($0.name).tag($0.id) }
                 }.frame(width: 230)
-                Menu { Button("名前を付けて保存…") { store.saveWorkspaceAs() }; Button("名前変更…") { store.renameWorkspace() }; Button("削除…") { store.deleteWorkspace() }.disabled(store.preferences.workspaces.count == 1) } label: { Image(systemName: "ellipsis.circle") }
+                Button { store.createWorkspace() } label: { Image(systemName: "plus") }.help("空のワークスペースを新規作成")
+                Menu { Button("新規ワークスペース…") { store.createWorkspace() }; Divider(); Button("現在の配置を複製して保存…") { store.saveWorkspaceAs() }; Button("名前変更…") { store.renameWorkspace() }; Button("削除…") { store.deleteWorkspace() }.disabled(store.preferences.workspaces.count == 1) } label: { Image(systemName: "ellipsis.circle") }
                 Spacer()
                 Button { store.refreshID = UUID() } label: { Label("再読み込み", systemImage: "arrow.clockwise") }
                 Button { store.historyVisible = true } label: { Label("履歴", systemImage: "clock.arrow.circlepath") }

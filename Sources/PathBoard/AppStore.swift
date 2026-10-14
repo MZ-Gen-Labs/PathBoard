@@ -168,6 +168,23 @@ import PathBoardCore
         } else { copy.id = UUID(); copy.name = name; preferences.workspaces.append(copy) }
         preferences.selectedID = copy.id; saveNow()
     }
+    func createWorkspace() {
+        saveNow()
+        let existingNames = Set(preferences.workspaces.map(\.name))
+        let baseName = "新しいワークスペース"
+        var suggestedName = baseName
+        var suffix = 2
+        while existingNames.contains(suggestedName) {
+            suggestedName = "\(baseName) \(suffix)"
+            suffix += 1
+        }
+        guard let name = prompt("新規ワークスペース", value: suggestedName) else { return }
+        guard !existingNames.contains(name) else { errorMessage = "同じ名前のワークスペースがすでにあります。"; return }
+        let created = Workspace(name: name)
+        preferences.workspaces.append(created)
+        preferences.selectedID = created.id
+        saveNow(); refreshID = UUID()
+    }
     func renameWorkspace() {
         guard let name = prompt("ワークスペース名", value: workspace.name) else { return }
         guard !preferences.workspaces.contains(where: { $0.name == name && $0.id != workspace.id }) else { errorMessage = "同じ名前がすでに存在します。"; return }
