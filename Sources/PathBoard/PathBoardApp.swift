@@ -87,12 +87,21 @@ struct PanelView: View {
                     Spacer()
                     Menu { Button("表示名を変更…") { store.renamePanel(index) }; Button("保存先を再指定…") { store.register(index) }; Toggle("隠し項目を表示", isOn: Binding(get: { panel.showsHidden }, set: { value in store.updatePanel(index) { $0.showsHidden = value } })); Button("登録を外す") { store.removePanel(index) } } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).frame(width: 25)
                 }.padding(.horizontal, 12).padding(.top, 10)
+                    .contentShape(Rectangle())
+                    .draggable(panel.id.uuidString)
+                    .dropDestination(for: String.self) { values, _ in
+                        guard let value = values.first, let sourceID = UUID(uuidString: value) else { return false }
+                        store.movePanel(from: sourceID, to: index); return true
+                    }
+                    .help("ドラッグしてパネルの位置を入れ替え")
                 let current = root.appendingPathComponent(panel.currentPath).path
                 HStack {
                     Text(panel.currentPath.isEmpty ? root.path : root.lastPathComponent + "/" + panel.currentPath).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle).help(current)
                     Spacer(minLength: 2)
                     Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(current, forType: .string) } label: { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).help("現在のパスをコピー")
                     Button { store.updatePanel(index) { $0.currentPath = "" }; store.refreshID = UUID() } label: { Image(systemName: "house") }.buttonStyle(.plain).help("登録したルートへ戻る")
+                    Button { store.createFolder(index) } label: { Image(systemName: "folder.badge.plus") }.buttonStyle(.plain).help("現在のフォルダ内に新規フォルダを作成")
+                    Button { store.renameCurrentFolder(index) } label: { Image(systemName: "pencil") }.buttonStyle(.plain).disabled(panel.currentPath.isEmpty).help("現在のフォルダ名を変更")
                 }.padding(.horizontal, 12).padding(.vertical, 8)
                 Divider()
                 if FileSafety.exists(root) {

@@ -57,6 +57,12 @@ import PathBoardCore
         guard preferences.workspaces[workspaceIndex].panels.indices.contains(index) else { return }
         change(&preferences.workspaces[workspaceIndex].panels[index]); scheduleSave()
     }
+    func movePanel(from sourceID: UUID, to targetIndex: Int) {
+        guard !running, workspace.panels.indices.contains(targetIndex),
+              let sourceIndex = workspace.panels.firstIndex(where: { $0.id == sourceID }), sourceIndex != targetIndex else { return }
+        preferences.workspaces[workspaceIndex].panels.swapAt(sourceIndex, targetIndex)
+        saveNow(); refreshID = UUID()
+    }
     func scheduleSave() {
         saveTask?.cancel()
         saveTask = Task { try? await Task.sleep(nanoseconds: 300_000_000); if !Task.isCancelled { saveNow() } }
@@ -96,6 +102,60 @@ import PathBoardCore
         return name.isEmpty ? nil : name
     }
     func renamePanel(_ index: Int) { if let name = prompt("保存先の表示名", value: workspace.panels[index].name) { updatePanel(index) { $0.name = name }; saveNow() } }
+    func createFolder(_ index: Int) {
+        guard let root = workspace.panels[index].root else { return }
+        let parent = root.appendingPathComponent(workspace.panels[index].currentPath).standardizedFileURL
+        do {
+            try FileSafety.validate(parent, inside: root, allowRoot: true)
+            guard FileSafety.exists(parent), (try parent.resourceValues(forKeys: [.isDirectoryKey])).isDirectory == true else { throw PathBoardError.unsafe("現在の場所を開けません。") }
+            guard let name = prompt("新しいフォルダ", value: "名称未設定フォルダ") else { return }
+            guard validFolderName(name) else { throw PathBoardError.unsafe("フォルダ名に / や : は使えません。") }
+            let destination = parent.appendingPathComponent(name, isDirectory: true)
+            try coordinatedFolderChange(at: parent) {
+                guard !FileSafety.exists(destination) else { throw PathBoardError.unsafe("同じ名前の項目がすでにあります。") }
+                try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+            }
+            saveNow(); refreshID = UUID()
+        } catch { errorMessage = "フォルダを作成できません：" + error.localizedDescription }
+    }
+    func renameCurrentFolder(_ index: Int) {
+        let panel = workspace.panels[index]
+        guard let root = panel.root, !panel.currentPath.isEmpty else { errorMessage = "登録したルートフォルダ自体の名前は変更できません。"; return }
+        let source = root.appendingPathComponent(panel.currentPath).standardizedFileURL
+        let parent = source.deletingLastPathComponent()
+        do {
+            try FileSafety.validate(source, inside: root)
+            try FileSafety.validate(parent, inside: root, allowRoot: true)
+            guard FileSafety.exists(source), (try source.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey])).isDirectory == true,
+                  (try source.resourceValues(forKeys: [.isSymbolicLinkKey])).isSymbolicLink != true,
+                  (try source.resourceValues(forKeys: [.isPackageKey])).isPackage != true else { throw PathBoardError.unsafe("通常のフォルダだけ名前を変更できます。") }
+            guard let name = prompt("フォルダ名を変更", value: source.lastPathComponent) else { return }
+            guard validFolderName(name) else { throw PathBoardError.unsafe("フォルダ名に / や : は使えません。") }
+            let destination = parent.appendingPathComponent(name, isDirectory: true)
+            try coordinatedFolderChange(at: parent) {
+                guard !FileSafety.exists(destination) else { throw PathBoardError.unsafe("同じ名前の項目がすでにあります。") }
+                try FileSafety.renameExclusively(source, to: destination)
+            }
+            let oldPath = source.path, newPath = destination.path
+            updatePanel(index) { value in
+                if value.currentPath == panel.currentPath { value.currentPath = String(newPath.dropFirst(root.path.count + 1)) }
+                value.expandedPaths = value.expandedPaths.map { path in path == oldPath || path.hasPrefix(oldPath + "/") ? newPath + String(path.dropFirst(oldPath.count)) : path }
+            }
+            saveNow(); refreshID = UUID()
+        } catch { errorMessage = "フォルダ名を変更できません：" + error.localizedDescription }
+    }
+    private func validFolderName(_ name: String) -> Bool {
+        !name.isEmpty && name != "." && name != ".." && !name.contains("/") && !name.contains(":") && !name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) })
+    }
+    private func coordinatedFolderChange(at parent: URL, change: () throws -> Void) throws {
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        var coordinationError: NSError?, operationError: Error?
+        coordinator.coordinate(writingItemAt: parent, options: .forMerging, error: &coordinationError) { coordinated in
+            do { try change() } catch { operationError = error }
+        }
+        if let coordinationError { throw coordinationError }
+        if let operationError { throw operationError }
+    }
     func removePanel(_ index: Int) { updatePanel(index) { $0 = PanelConfiguration() }; saveNow(); refreshID = UUID() }
     func saveWorkspaceAs() {
         guard let name = prompt("ワークスペースを保存", value: workspace.name) else { return }
