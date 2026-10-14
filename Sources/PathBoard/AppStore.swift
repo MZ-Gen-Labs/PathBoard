@@ -133,6 +133,7 @@ import PathBoardCore
         jobs.append(.transfer(request)); queuedCount = jobs.count; startNext()
     }
     func receive(_ record: TransferRecord) {
+        guard running else { return }
         if let i = records.firstIndex(where: { $0.id == record.id }) { records[i] = record } else { records.insert(record, at: 0) }
         currentStatus = record.phase.label + "：" + URL(fileURLWithPath: record.source).lastPathComponent
     }
