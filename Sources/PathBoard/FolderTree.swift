@@ -20,7 +20,7 @@ final class TreeNode: NSObject {
 struct FolderTree: NSViewRepresentable {
     let panel: PanelConfiguration
     let refreshID: UUID
-    let onChange: (String, [String], Double) -> Void
+    let onChange: (String, String?, [String], Double) -> Void
     let onDrop: (DragPayload, URL) -> Void
     let onError: (String?) -> Void
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -38,6 +38,7 @@ struct FolderTree: NSViewRepresentable {
         var generation = UUID()
         var observer: NSObjectProtocol?
         var currentURL: URL?
+        var selectedURL: URL?
         init(_ owner: FolderTree) { self.owner = owner }
         deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
         func makeView() -> NSScrollView {
@@ -57,6 +58,7 @@ struct FolderTree: NSViewRepresentable {
             let key = "\(value.panel.id):\(value.panel.rootPath ?? ""):\(value.panel.showsHidden):\(value.refreshID)"
             guard key != loadedKey else { return }; loadedKey = key; generation = UUID()
             currentURL = value.panel.root.map { $0.appendingPathComponent(value.panel.currentPath) }
+            selectedURL = value.panel.selectedPath.map { URL(fileURLWithPath: $0) }
             if let rootURL = value.panel.root {
                 var current = currentURL ?? rootURL
                 while !FileSafety.exists(current), current.path != rootURL.path { current.deleteLastPathComponent() }
@@ -83,7 +85,7 @@ struct FolderTree: NSViewRepresentable {
                         self.restoring = true
                         self.outline.reloadItem(node === self.root ? nil : node, reloadChildren: true)
                         for child in children where self.owner.panel.expandedPaths.contains(child.url.path) && child.browsable { self.outline.expandItem(child); self.load(child) }
-                        if let url = self.currentURL, let selected = self.nodes[url.path] { let row = self.outline.row(forItem: selected); if row >= 0 { self.outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false) } }
+                        if let url = self.selectedURL ?? self.currentURL, let selected = self.nodes[url.path] { let row = self.outline.row(forItem: selected); if row >= 0 { self.outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false) } }
                         self.scroll.contentView.scroll(to: NSPoint(x: 0, y: self.owner.panel.scrollY)); self.scroll.reflectScrolledClipView(self.scroll.contentView)
                         self.restoring = false; self.refreshing = false
                     case .failure(let error):
@@ -112,7 +114,7 @@ struct FolderTree: NSViewRepresentable {
         func outlineViewItemDidCollapse(_ notification: Notification) { persistState() }
         func outlineViewSelectionDidChange(_ notification: Notification) {
             guard !restoring, outline.selectedRow >= 0, let selected = outline.item(atRow: outline.selectedRow) as? TreeNode else { return }
-            currentURL = selected.browsable ? selected.url : selected.url.deletingLastPathComponent(); persistState()
+            currentURL = selected.browsable ? selected.url : selected.url.deletingLastPathComponent(); selectedURL = selected.url; persistState()
         }
         func persistState() {
             guard !restoring, !refreshing, let base = owner.panel.root, let currentURL else { return }
@@ -122,7 +124,7 @@ struct FolderTree: NSViewRepresentable {
                 if outline.isItemExpanded(node) { expanded.insert(node.url.path) }
                 else if outline.row(forItem: node) >= 0 { expanded.remove(node.url.path) }
             }
-            owner.onChange(relative, expanded.sorted(), scroll.contentView.bounds.origin.y)
+            owner.onChange(relative, selectedURL?.path, expanded.sorted(), scroll.contentView.bounds.origin.y)
         }
         func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
             guard let node = item as? TreeNode else { return nil }
@@ -132,14 +134,23 @@ struct FolderTree: NSViewRepresentable {
             let writer = NSPasteboardItem(); writer.setData(data, forType: dragType); return writer
         }
         func outlineView(_ outlineView: NSOutlineView, validateDrop info: NSDraggingInfo, proposedItem item: Any?, proposedChildIndex index: Int) -> NSDragOperation {
-            guard info.draggingSource != nil, let data = info.draggingPasteboard.data(forType: dragType), let payload = try? JSONDecoder().decode(DragPayload.self, from: data), payload.panelID != owner.panel.id else { return [] }
+            guard info.draggingSource != nil, let data = info.draggingPasteboard.data(forType: dragType), let payload = try? JSONDecoder().decode(DragPayload.self, from: data) else { return [] }
             if let node = item as? TreeNode {
                 guard node.browsable else { return [] }; outlineView.setDropItem(node, dropChildIndex: NSOutlineViewDropOnItemIndex)
             } else { outlineView.setDropItem(nil, dropChildIndex: NSOutlineViewDropOnItemIndex) }
+            if payload.panelID == owner.panel.id, let root = owner.panel.root {
+                let destination = (item as? TreeNode)?.url ?? currentURL ?? root
+                guard (try? FileSafety.validate(destination, inside: root, allowRoot: true)) != nil else { return [] }
+                for source in FileSafety.normalizedSources(payload.paths.map { URL(fileURLWithPath: $0) }) {
+                    guard (try? FileSafety.validate(source, inside: root)) != nil,
+                          !FileSafety.sameLocation(source.deletingLastPathComponent(), destination),
+                          !FileSafety.isSameOrDescendant(destination, of: source) else { return [] }
+                }
+            }
             return .copy
         }
         func outlineView(_ outlineView: NSOutlineView, acceptDrop info: NSDraggingInfo, item: Any?, childIndex index: Int) -> Bool {
-            guard let data = info.draggingPasteboard.data(forType: dragType), let payload = try? JSONDecoder().decode(DragPayload.self, from: data), payload.panelID != owner.panel.id,
+            guard let data = info.draggingPasteboard.data(forType: dragType), let payload = try? JSONDecoder().decode(DragPayload.self, from: data),
                   let folder = (item as? TreeNode)?.url ?? currentURL ?? owner.panel.root else { return false }
             // NSOutlineView may request the same payload for every selected row.
             owner.onDrop(DragPayload(panelID: payload.panelID, paths: Array(Set(payload.paths))), folder); return true

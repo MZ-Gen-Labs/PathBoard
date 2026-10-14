@@ -100,16 +100,17 @@ struct PanelView: View {
                     Text(panel.currentPath.isEmpty ? root.path : root.lastPathComponent + "/" + panel.currentPath).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle).help(current)
                     Spacer(minLength: 2)
                     Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(current, forType: .string) } label: { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).help("現在のパスをコピー")
-                    Button { store.updatePanel(index) { $0.currentPath = "" }; store.refreshID = UUID() } label: { Image(systemName: "house") }.buttonStyle(.plain).help("登録したルートへ戻る")
+                    Button { store.updatePanel(index) { $0.currentPath = ""; $0.selectedPath = nil }; store.refreshID = UUID() } label: { Image(systemName: "house") }.buttonStyle(.plain).help("登録したルートへ戻る")
                     Button { store.createFolder(index) } label: { Image(systemName: "folder.badge.plus") }.buttonStyle(.plain).help("現在のフォルダ内に新規フォルダを作成")
-                    Button { store.renameCurrentFolder(index) } label: { Image(systemName: "pencil") }.buttonStyle(.plain).disabled(panel.currentPath.isEmpty).help("現在のフォルダ名を変更")
+                    Button { store.renameSelectedFolder(index) } label: { Image(systemName: "pencil") }.buttonStyle(.plain).disabled(store.selectedFolder(index) == nil).help("選択中のフォルダ名を変更")
+                    Button { store.deleteSelectedFolder(index) } label: { Image(systemName: "trash") }.buttonStyle(.plain).disabled(store.selectedFolder(index) == nil).help("選択中のフォルダをゴミ箱へ移動")
                 }.padding(.horizontal, 12).padding(.vertical, 8)
                 Divider()
                 if FileSafety.exists(root) {
                     if let treeError { Text("フォルダを読み込めません：" + treeError).font(.caption).foregroundStyle(.orange).padding(8) }
-                    FolderTree(panel: panel, refreshID: store.refreshID, onChange: { current, expanded, scroll in
-                        guard current != panel.currentPath || expanded != panel.expandedPaths || abs(scroll-panel.scrollY) > 1 else { return }
-                        store.updatePanel(index) { $0.currentPath = current; $0.expandedPaths = expanded; $0.scrollY = scroll }
+                    FolderTree(panel: panel, refreshID: store.refreshID, onChange: { current, selected, expanded, scroll in
+                        guard current != panel.currentPath || selected != panel.selectedPath || expanded != panel.expandedPaths || abs(scroll-panel.scrollY) > 1 else { return }
+                        store.updatePanel(index) { $0.currentPath = current; $0.selectedPath = selected; $0.expandedPaths = expanded; $0.scrollY = scroll }
                     }, onDrop: { payload, folder in store.acceptDrop(payload: payload, into: index, folder: folder) }, onError: { treeError = $0 })
                 } else {
                     ContentUnavailableView { Label("保存先が利用できません", systemImage: "exclamationmark.folder") } description: { Text("接続・権限を確認するか、保存先を再指定してください。") } actions: { Button("再指定") { store.register(index) } }

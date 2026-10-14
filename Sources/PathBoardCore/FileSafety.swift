@@ -3,6 +3,18 @@ import CryptoKit
 import Darwin
 
 public enum FileSafety {
+    private static func comparisonPath(_ url: URL) -> String {
+        url.standardizedFileURL.resolvingSymlinksInPath().path
+            .precomposedStringWithCanonicalMapping
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+    }
+    public static func sameLocation(_ first: URL, _ second: URL) -> Bool {
+        comparisonPath(first) == comparisonPath(second)
+    }
+    public static func isSameOrDescendant(_ candidate: URL, of ancestor: URL) -> Bool {
+        let candidatePath = comparisonPath(candidate), ancestorPath = comparisonPath(ancestor)
+        return candidatePath == ancestorPath || candidatePath.hasPrefix(ancestorPath.hasSuffix("/") ? ancestorPath : ancestorPath + "/")
+    }
     public static func exists(_ url: URL) -> Bool {
         var st = stat(); return lstat(url.path, &st) == 0
     }

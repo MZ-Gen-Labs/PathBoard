@@ -88,7 +88,7 @@ import PathBoardCore
             let bookmark = try url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
             updatePanel(index) { panel in
                 panel.rootPath = url.path; panel.bookmark = bookmark; panel.name = url.lastPathComponent
-                panel.currentPath = ""; panel.expandedPaths = []; panel.scrollY = 0
+                panel.currentPath = ""; panel.selectedPath = nil; panel.expandedPaths = []; panel.scrollY = 0
             }
             saveNow(); refreshID = UUID()
         } catch { errorMessage = error.localizedDescription }
@@ -118,10 +118,19 @@ import PathBoardCore
             saveNow(); refreshID = UUID()
         } catch { errorMessage = "フォルダを作成できません：" + error.localizedDescription }
     }
-    func renameCurrentFolder(_ index: Int) {
+    func selectedFolder(_ index: Int) -> URL? {
+        guard workspace.panels.indices.contains(index), let root = workspace.panels[index].root,
+              let selectedPath = workspace.panels[index].selectedPath else { return nil }
+        let folder = URL(fileURLWithPath: selectedPath).standardizedFileURL
+        guard folder.path != root.standardizedFileURL.path,
+              (try? FileSafety.validate(folder, inside: root)) != nil,
+              let values = try? folder.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey]),
+              values.isDirectory == true, values.isSymbolicLink != true, values.isPackage != true else { return nil }
+        return folder
+    }
+    func renameSelectedFolder(_ index: Int) {
         let panel = workspace.panels[index]
-        guard let root = panel.root, !panel.currentPath.isEmpty else { errorMessage = "登録したルートフォルダ自体の名前は変更できません。"; return }
-        let source = root.appendingPathComponent(panel.currentPath).standardizedFileURL
+        guard let root = panel.root, let source = selectedFolder(index) else { errorMessage = "名前を変更するフォルダを選択してください。"; return }
         let parent = source.deletingLastPathComponent()
         do {
             try FileSafety.validate(source, inside: root)
@@ -140,11 +149,44 @@ import PathBoardCore
             }
             let oldPath = source.path, newPath = destination.path
             updatePanel(index) { value in
-                if value.currentPath == panel.currentPath { value.currentPath = String(newPath.dropFirst(root.path.count + 1)) }
+                if value.currentPath == panel.currentPath || value.currentPath.hasPrefix(panel.currentPath + "/") {
+                    let currentAbsolute = root.appendingPathComponent(value.currentPath).path
+                    if currentAbsolute == oldPath || currentAbsolute.hasPrefix(oldPath + "/") { value.currentPath = String(newPath.dropFirst(root.path.count + 1)) + String(currentAbsolute.dropFirst(oldPath.count)) }
+                }
+                if let selected = value.selectedPath, selected == oldPath || selected.hasPrefix(oldPath + "/") { value.selectedPath = newPath + String(selected.dropFirst(oldPath.count)) }
                 value.expandedPaths = value.expandedPaths.map { path in path == oldPath || path.hasPrefix(oldPath + "/") ? newPath + String(path.dropFirst(oldPath.count)) : path }
             }
             saveNow(); refreshID = UUID()
         } catch { errorMessage = "フォルダ名を変更できません：" + error.localizedDescription }
+    }
+    func deleteSelectedFolder(_ index: Int) {
+        guard let root = workspace.panels[index].root, let folder = selectedFolder(index) else { errorMessage = "削除するフォルダを選択してください。"; return }
+        let detail = "「\(folder.lastPathComponent)」とその中身をシステムのゴミ箱へ移します。ゴミ箱に対応しない保存先では削除せず、エラーを表示します。\n\n\(folder.path)"
+        guard confirm("フォルダをゴミ箱へ移しますか？", detail: detail, action: "ゴミ箱へ移動") else { return }
+        do {
+            try FileSafety.validate(folder, inside: root)
+            let coordinator = NSFileCoordinator(filePresenter: nil)
+            var coordinationError: NSError?, operationError: Error?
+            coordinator.coordinate(writingItemAt: folder, options: .forDeleting, error: &coordinationError) { coordinatedFolder in
+                do {
+                    var trashedURL: NSURL?
+                    try FileManager.default.trashItem(at: coordinatedFolder, resultingItemURL: &trashedURL)
+                    guard trashedURL != nil else { throw PathBoardError.unsafe("ゴミ箱へ移動した結果を確認できませんでした。") }
+                } catch { operationError = error }
+            }
+            if let coordinationError { throw coordinationError }
+            if let operationError { throw operationError }
+            let oldPath = folder.path
+            let relative = String(oldPath.dropFirst(root.standardizedFileURL.path.count + 1))
+            let parentURL = folder.deletingLastPathComponent()
+            let parentRelative = parentURL.path == root.standardizedFileURL.path ? "" : String(parentURL.path.dropFirst(root.standardizedFileURL.path.count + 1))
+            updatePanel(index) { value in
+                if value.currentPath == relative || value.currentPath.hasPrefix(relative + "/") { value.currentPath = parentRelative }
+                value.selectedPath = nil
+                value.expandedPaths.removeAll { $0 == oldPath || $0.hasPrefix(oldPath + "/") }
+            }
+            saveNow(); refreshID = UUID()
+        } catch { errorMessage = "フォルダをゴミ箱へ移せませんでした：" + error.localizedDescription }
     }
     private func validFolderName(_ name: String) -> Bool {
         !name.isEmpty && name != "." && name != ".." && !name.contains("/") && !name.contains(":") && !name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) })
@@ -202,13 +244,21 @@ import PathBoardCore
     }
     func acceptDrop(payload: DragPayload, into index: Int, folder: URL) {
         guard operationsAvailable else { errorMessage = "設定・履歴の読み書きに問題があるため、ファイル操作を停止しています。"; return }
-        guard let sourceIndex = workspace.panels.firstIndex(where: { $0.id == payload.panelID }), sourceIndex != index,
+        guard let sourceIndex = workspace.panels.firstIndex(where: { $0.id == payload.panelID }),
               let sourceRoot = workspace.panels[sourceIndex].root, let destinationRoot = workspace.panels[index].root else { return }
-        let alert = NSAlert(); alert.messageText = "\(payload.paths.count)項目を転送"
+        let sources = FileSafety.normalizedSources(payload.paths.map { URL(fileURLWithPath: $0) })
+        guard !sources.isEmpty else { return }
+        for source in sources {
+            guard !FileSafety.isSameOrDescendant(folder, of: source),
+                  !(FileSafety.sameLocation(sourceRoot, destinationRoot) && FileSafety.sameLocation(source.deletingLastPathComponent(), folder)) else {
+                errorMessage = "同じ場所への操作や、フォルダをその配下へ移動する操作はできません。"; return
+            }
+        }
+        let alert = NSAlert(); alert.messageText = "\(sources.count)項目を転送"
         alert.informativeText = "保存先：\(folder.path)\n\n移動はコピー検証後に元データをゴミ箱へ保全します。クラウド同期の完了は確認できません。"
         alert.addButton(withTitle: "コピー"); alert.addButton(withTitle: "移動"); alert.addButton(withTitle: "キャンセル")
         let response = alert.runModal(); guard response == .alertFirstButtonReturn || response == .alertSecondButtonReturn else { return }
-        let request = TransferRequest(sources: payload.paths.map { URL(fileURLWithPath: $0) }, sourceRoot: sourceRoot, destinationFolder: folder, destinationRoot: destinationRoot, operation: response == .alertFirstButtonReturn ? .copy : .move)
+        let request = TransferRequest(sources: sources, sourceRoot: sourceRoot, destinationFolder: folder, destinationRoot: destinationRoot, operation: response == .alertFirstButtonReturn ? .copy : .move)
         jobs.append(.transfer(request)); queuedCount = jobs.count; startNext()
     }
     func receive(_ record: TransferRecord) {

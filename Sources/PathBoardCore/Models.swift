@@ -6,6 +6,7 @@ public struct PanelConfiguration: Codable, Identifiable, Equatable {
     public var bookmark: Data?
     public var name = "保存先を追加"
     public var currentPath = ""
+    public var selectedPath: String?
     public var expandedPaths: [String] = []
     public var scrollY: Double = 0
     public var showsHidden = false

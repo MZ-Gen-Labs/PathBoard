@@ -53,7 +53,7 @@ public final class TransferEngine: @unchecked Sendable {
             do {
                 try FileSafety.validate(source, inside: request.sourceRoot)
                 try FileSafety.validate(request.destinationFolder, inside: request.destinationRoot, allowRoot: true)
-                guard request.destinationFolder.path != source.path && !request.destinationFolder.path.hasPrefix(source.path + "/"), record.source != record.destination else { throw PathBoardError.unsafe("自分自身や配下への転送はできません。") }
+                guard !FileSafety.isSameOrDescendant(request.destinationFolder, of: source), !FileSafety.sameLocation(URL(fileURLWithPath: record.source), URL(fileURLWithPath: record.destination)) else { throw PathBoardError.unsafe("自分自身や配下への転送はできません。") }
                 try publish(record, progress: progress)
                 var destination = URL(fileURLWithPath: record.destination)
                 if FileSafety.exists(destination) {
