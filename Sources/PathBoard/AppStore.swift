@@ -110,8 +110,8 @@ import PathBoardCore
             guard FileSafety.exists(parent), (try parent.resourceValues(forKeys: [.isDirectoryKey])).isDirectory == true else { throw PathBoardError.unsafe("現在の場所を開けません。") }
             guard let name = prompt("新しいフォルダ", value: "名称未設定フォルダ") else { return }
             guard validFolderName(name) else { throw PathBoardError.unsafe("フォルダ名に / や : は使えません。") }
-            let destination = parent.appendingPathComponent(name, isDirectory: true)
-            try coordinatedFolderChange(at: parent) {
+            try coordinatedFolderChange(at: parent) { coordinatedParent in
+                let destination = coordinatedParent.appendingPathComponent(name, isDirectory: true)
                 guard !FileSafety.exists(destination) else { throw PathBoardError.unsafe("同じ名前の項目がすでにあります。") }
                 try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
             }
@@ -132,9 +132,11 @@ import PathBoardCore
             guard let name = prompt("フォルダ名を変更", value: source.lastPathComponent) else { return }
             guard validFolderName(name) else { throw PathBoardError.unsafe("フォルダ名に / や : は使えません。") }
             let destination = parent.appendingPathComponent(name, isDirectory: true)
-            try coordinatedFolderChange(at: parent) {
-                guard !FileSafety.exists(destination) else { throw PathBoardError.unsafe("同じ名前の項目がすでにあります。") }
-                try FileSafety.renameExclusively(source, to: destination)
+            try coordinatedFolderChange(at: parent) { coordinatedParent in
+                let coordinatedSource = coordinatedParent.appendingPathComponent(source.lastPathComponent, isDirectory: true)
+                let coordinatedDestination = coordinatedParent.appendingPathComponent(name, isDirectory: true)
+                guard !FileSafety.exists(coordinatedDestination) else { throw PathBoardError.unsafe("同じ名前の項目がすでにあります。") }
+                try FileSafety.renameExclusively(coordinatedSource, to: coordinatedDestination)
             }
             let oldPath = source.path, newPath = destination.path
             updatePanel(index) { value in
@@ -147,11 +149,11 @@ import PathBoardCore
     private func validFolderName(_ name: String) -> Bool {
         !name.isEmpty && name != "." && name != ".." && !name.contains("/") && !name.contains(":") && !name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) })
     }
-    private func coordinatedFolderChange(at parent: URL, change: () throws -> Void) throws {
+    private func coordinatedFolderChange(at parent: URL, change: (URL) throws -> Void) throws {
         let coordinator = NSFileCoordinator(filePresenter: nil)
         var coordinationError: NSError?, operationError: Error?
-        coordinator.coordinate(writingItemAt: parent, options: .forMerging, error: &coordinationError) { coordinated in
-            do { try change() } catch { operationError = error }
+        coordinator.coordinate(writingItemAt: parent, options: .forMerging, error: &coordinationError) { coordinatedParent in
+            do { try change(coordinatedParent) } catch { operationError = error }
         }
         if let coordinationError { throw coordinationError }
         if let operationError { throw operationError }
