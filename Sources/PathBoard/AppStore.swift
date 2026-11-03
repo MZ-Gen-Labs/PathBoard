@@ -57,6 +57,13 @@ import PathBoardCore
         guard preferences.workspaces[workspaceIndex].panels.indices.contains(index) else { return }
         change(&preferences.workspaces[workspaceIndex].panels[index]); scheduleSave()
     }
+    func toggleHiddenItemsForWorkspace() {
+        let shouldShow = !workspace.panels.contains(where: \.showsHidden)
+        for index in workspace.panels.indices {
+            preferences.workspaces[workspaceIndex].panels[index].showsHidden = shouldShow
+        }
+        saveNow(); refreshID = UUID()
+    }
     func movePanel(from sourceID: UUID, to targetIndex: Int) {
         guard !running, workspace.panels.indices.contains(targetIndex),
               let sourceIndex = workspace.panels.firstIndex(where: { $0.id == sourceID }), sourceIndex != targetIndex else { return }

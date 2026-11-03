@@ -33,12 +33,18 @@ struct ContentView: View {
             HStack(spacing: 12) {
                 Image(systemName: "square.grid.2x2.fill").foregroundStyle(.tint)
                 Text("PathBoard").font(.title3.bold())
+                Text(appVersion).font(.caption.monospacedDigit()).foregroundStyle(.secondary).accessibilityLabel("バージョン \(appVersion)")
                 Picker("ワークスペース", selection: Binding(get: { store.workspace.id }, set: { store.selectWorkspace($0) })) {
                     ForEach(store.preferences.workspaces) { Text($0.name).tag($0.id) }
                 }.frame(width: 230)
                 Button { store.createWorkspace() } label: { Image(systemName: "plus") }.help("空のワークスペースを新規作成")
                 Menu { Button("新規ワークスペース…") { store.createWorkspace() }; Divider(); Button("現在の配置を複製して保存…") { store.saveWorkspaceAs() }; Button("名前変更…") { store.renameWorkspace() }; Button("削除…") { store.deleteWorkspace() }.disabled(store.preferences.workspaces.count == 1) } label: { Image(systemName: "ellipsis.circle") }
                 Spacer()
+                Button { store.toggleHiddenItemsForWorkspace() } label: {
+                    Image(systemName: store.workspace.panels.contains(where: \.showsHidden) ? "eye" : "eye.slash")
+                }
+                .help(hiddenItemsHelp)
+                .accessibilityLabel(hiddenItemsHelp)
                 Button { store.refreshID = UUID() } label: { Label("再読み込み", systemImage: "arrow.clockwise") }
                 Button { store.historyVisible = true } label: { Label("履歴", systemImage: "clock.arrow.circlepath") }
             }.padding(14)
@@ -67,6 +73,15 @@ struct ContentView: View {
         .alert("PathBoard", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("OK") { store.errorMessage = nil }
         } message: { Text(store.errorMessage ?? "") }
+    }
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "不明"
+    }
+    private var hiddenItemsHelp: String {
+        let visible = store.workspace.panels.filter(\.showsHidden).count
+        if visible == 4 { return "隠し項目を表示中（4パネル）。クリックですべて非表示" }
+        if visible == 0 { return "隠し項目は非表示（4パネル）。クリックですべて表示" }
+        return "隠し項目は一部のパネルで表示中（\(visible)/4）。クリックですべて非表示"
     }
     func verticalDivider(_ total: Double) -> some View {
         Rectangle().fill(Color(nsColor: .separatorColor)).frame(width: 6)
@@ -97,7 +112,7 @@ struct PanelView: View {
                     .help("ドラッグしてパネルの位置を入れ替え")
                 let current = root.appendingPathComponent(panel.currentPath).path
                 HStack {
-                    Text(panel.currentPath.isEmpty ? root.path : root.lastPathComponent + "/" + panel.currentPath).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle).help(current)
+                    Text(current).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle).help(current)
                     Spacer(minLength: 2)
                     Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(current, forType: .string) } label: { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).help("現在のパスをコピー")
                     Button { store.updatePanel(index) { $0.currentPath = ""; $0.selectedPath = nil }; store.refreshID = UUID() } label: { Image(systemName: "house") }.buttonStyle(.plain).help("登録したルートへ戻る")
