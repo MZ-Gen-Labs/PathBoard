@@ -56,3 +56,11 @@ GitHub ActionsはPR・main/masterへのpushでテストとPKG作成を行い、A
 - [実装・検証状況](docs/implementation-status.md)
 
 MIT License / Copyright (c) 2026 MZ-Gen-Labs
+
+## 別Mac用の検証済みZIPを作る
+
+`scripts/package-personal-mac.py` は指定したビルドコマンドを実行し、完成appの署名・Bundle ID・実行ファイル・CPU・シンボリックリンク・システム外の絶対ライブラリ依存を確認してからZIP化します。ZIPを新規フォルダへ再展開して再検証し、成功時だけチェックサムとbuild-infoを出力します。ソースが未確定・ビルド失敗・署名検証失敗の場合は停止します。使うだけのMacで再ビルドは不要です。
+
+開発元で `python3 scripts/package-personal-mac.py --help` を確認し、`--build-command-json` にビルドコマンドのJSON配列、`--app` にその完成品、`--bundle-id` に既存の識別子、`--repo` にこのリポジトリを指定します。`--output` は専用の出力先とし、`--name` は版・CPU・commitを含む未使用のZIP名にしてください。署名の変更・インストール・起動・認証情報の移行はこの処理に含みません。
+
+このZIP作成と技術検証は `docs/release-gate.json` の手動受入検査の代わりにはなりません。通常Releaseの未完了ゲートを合格へ書き換えないでください。
