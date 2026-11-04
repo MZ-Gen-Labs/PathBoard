@@ -21,7 +21,15 @@ def audit(app):
   with p.open('rb') as f:magic=f.read(4)
   if magic not in [bytes.fromhex(s) for s in ['feedface','feedfacf','cefaedfe','cffaedfe','cafebabe','bebafeca','cafebabf','bfbafeca']]:continue
   binaries.append(str(p.relative_to(app)))
-  deps=run(['otool','-L',str(p)])
+  # otool treats a parenthesized filename as an archive member. Inspect a
+  # neutral temporary copy for such paths, without changing the signed app.
+  if '(' in str(p) or ')' in str(p):
+   with tempfile.TemporaryDirectory(prefix='macho-inspection-') as scratch:
+    neutral=Path(scratch)/'binary'
+    shutil.copyfile(p,neutral)
+    deps=run(['otool','-L',str(neutral)])
+  else:
+   deps=run(['otool','-L',str(p)])
   for line in deps.splitlines()[1:]:
    if not line.startswith(('\t',' ')):continue  # Skip per-architecture Mach-O headings
    dep=line.strip().split(' (',1)[0]
